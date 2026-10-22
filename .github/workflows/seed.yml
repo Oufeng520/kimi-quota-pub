@@ -1,0 +1,46 @@
+name: seed-broker-token
+
+# 一次性手动触发：把当前网页 token（必要时先刷新）AES 加密后写入 broker
+# retained kimi/quota/auth，供腾讯云 SCF 函数作为 token 来源。
+# 播种完成后 GitHub 侧的 schedule 应保持禁用，由 SCF 独占刷新链。
+
+on:
+  workflow_dispatch:
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install paho-mqtt pycryptodome pynacl
+
+      - name: restore web auth from secret
+        env:
+          KIMI_WEB_AUTH: ${{ secrets.KIMI_WEB_AUTH }}
+        run: printf '%s' "$KIMI_WEB_AUTH" > kimi_web_auth.json
+
+      - name: refresh if needed and seed broker
+        env:
+          KIMI_WEB_AUTH_FILE: kimi_web_auth.json
+          TOKEN_KEY: ${{ secrets.TOKEN_KEY }}
+          MQTT_USERNAME: ${{ secrets.MQTT_USERNAME }}
+          MQTT_PASSWORD: ${{ secrets.MQTT_PASSWORD }}
+        run: python seed_broker.py
+
+      - name: write back token to secret
+        if: always()
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          SECRET_NAME: KIMI_WEB_AUTH
+          SECRET_FILE: kimi_web_auth.json
+        run: |
+          if [ -f "$SECRET_FILE" ]; then
+            python update_secret.py
+          fi
