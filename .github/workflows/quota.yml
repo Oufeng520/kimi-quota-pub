@@ -1,5 +1,6 @@
 name: publish-kimi-quota
 
+# trigger-registration: 新增/修改本文件会促使 GitHub 重新注册 schedule 触发器
 on:
   schedule:
     # 每 10 分钟一次（UTC，GitHub 排队可能晚几分钟，看板场景无影响）
