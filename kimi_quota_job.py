@@ -250,7 +250,7 @@ def fetch_kimi_quota():
 
 
 def log(msg):
-    line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
+    line = f"[{datetime.now(LOCAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
     print(line)
     try:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
@@ -306,7 +306,7 @@ def main():
     except Exception as e:
         log(f"FAIL fetch quota: {e}")
         return 1
-    payload["updated"] = datetime.now().strftime("%H:%M:%S")
+    payload["updated"] = datetime.now(LOCAL_TZ).strftime("%H:%M:%S")
     if "total" in payload:
         payload.setdefault("total_code", 0.0)  # CLI 兜底通道无 Code 拆分，按 0 处理
     else:
