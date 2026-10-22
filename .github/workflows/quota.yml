@@ -1,0 +1,52 @@
+name: publish-kimi-quota
+
+on:
+  schedule:
+    # 每 10 分钟一次（UTC，GitHub 排队可能晚几分钟，看板场景无影响）
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: quota-pub
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install paho-mqtt pynacl
+
+      - name: restore web auth from secret
+        env:
+          KIMI_WEB_AUTH: ${{ secrets.KIMI_WEB_AUTH }}
+        run: printf '%s' "$KIMI_WEB_AUTH" > kimi_web_auth.json
+
+      - name: fetch quota and publish to EMQX
+        env:
+          MQTT_USERNAME: ${{ secrets.MQTT_USERNAME }}
+          MQTT_PASSWORD: ${{ secrets.MQTT_PASSWORD }}
+        run: python kimi_quota_job.py
+
+      # token 一旦被刷新（refresh_token 轮换）必须写回 Secret，
+      # 即使后续步骤失败也要执行，否则下轮拿到旧 refresh_token 会失效
+      - name: write back rotated token
+        if: always()
+        env:
+          KIMI_WEB_AUTH: ${{ secrets.KIMI_WEB_AUTH }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          SECRET_NAME: KIMI_WEB_AUTH
+          SECRET_FILE: kimi_web_auth.json
+        run: |
+          if [ -f "$SECRET_FILE" ] && ! cmp -s "$SECRET_FILE" <(printf '%s' "$KIMI_WEB_AUTH"); then
+            python update_secret.py
+          else
+            echo "token unchanged"
+          fi
